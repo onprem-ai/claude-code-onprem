@@ -193,11 +193,13 @@ export async function run(): Promise<void> {
     initialSelection = ['exa']
   }
 
+  p.log.message('One provider is usually enough. Exa is optimized for coding agents.\nBrave is an alternative search for maximum privacy.')
+
   const selectedProviders = exitOnCancel(await p.multiselect({
     message: 'Which providers would you like to configure?',
     options: [
-      { value: 'exa', label: 'Exa (code search, API docs, technical content)' },
-      { value: 'brave', label: 'Brave (privacy-focused, news, general research)' },
+      { value: 'exa', label: 'Exa - best for coding (API docs, code examples, technical content)' },
+      { value: 'brave', label: 'Brave - privacy-focused (news, general research)' },
     ],
     initialValues: initialSelection,
     required: false,
@@ -515,16 +517,17 @@ export async function run(): Promise<void> {
   }
 
   // Ask about disabling CCS websearch
-  p.log.step('CCS Built-in Web Search')
+  const recommendDisable = anyMcpConfigured
+  p.log.step(`CCS Built-in Web Search ${recommendDisable ? '(recommended: disable)' : ''}`)
 
   if (anyMcpConfigured) {
-    p.log.message('You have installed custom web search plugins (Exa/Brave).\nDisabling CCS built-in websearch is recommended to avoid duplicate results.')
+    p.log.message('You have installed custom web search plugins (Exa/Brave).\nDisable CCS built-in websearch to avoid duplicate results.')
   } else {
-    p.log.message('No custom web search plugins were installed.\nKeeping CCS built-in websearch enabled is recommended.')
+    p.log.message('No custom web search plugins were installed.\nKeeping CCS built-in websearch enabled.')
   }
 
   const disableWebsearch = exitOnCancel(await p.confirm({
-    message: 'Disable CCS built-in web search?',
+    message: `Disable CCS built-in web search?${recommendDisable ? ' (recommended: yes)' : ''}`,
     initialValue: anyMcpConfigured,
   }))
 
