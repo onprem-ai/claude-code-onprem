@@ -1,6 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 
+export const MIN_NODE_VERSION = '18.0.0'
 export const MIN_CCS_VERSION = '7.65.3'
 export const MIN_CLAUDE_VERSION = '2.1.72'
 

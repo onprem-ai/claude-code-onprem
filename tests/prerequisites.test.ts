@@ -12,6 +12,11 @@ describe('prerequisites', () => {
   })
 
   describe('parseVersion', () => {
+    it('extracts version from node output', () => {
+      const output = 'v20.10.0'
+      expect(parseVersion(output, 'node')).toBe('20.10.0')
+    })
+
     it('extracts version from ccs output', () => {
       const output = 'CCS (Claude Code Switch) v7.65.3\n\nInstallation:\n...'
       expect(parseVersion(output, 'ccs')).toBe('7.65.3')
@@ -47,22 +52,38 @@ describe('prerequisites', () => {
   })
 
   describe('checkPrerequisites', () => {
-    it('returns success when both tools meet minimum versions', async () => {
+    it('returns success when all tools meet minimum versions', async () => {
       mockExecSync
+        .mockReturnValueOnce('v20.10.0')
         .mockReturnValueOnce('CCS (Claude Code Switch) v7.65.3')
         .mockReturnValueOnce('2.1.72 (Claude Code)')
 
       const result = await checkPrerequisites()
 
       expect(result.success).toBe(true)
+      expect(result.node).toEqual({ installed: true, version: '20.10.0', meetsMinimum: true })
       expect(result.ccs).toEqual({ installed: true, version: '7.65.3', meetsMinimum: true })
       expect(result.claude).toEqual({ installed: true, version: '2.1.72', meetsMinimum: true })
     })
 
+    it('returns failure when node version is too low', async () => {
+      mockExecSync
+        .mockReturnValueOnce('v16.0.0')
+        .mockReturnValueOnce('CCS (Claude Code Switch) v7.65.3')
+        .mockReturnValueOnce('2.1.72 (Claude Code)')
+
+      const result = await checkPrerequisites()
+
+      expect(result.success).toBe(false)
+      expect(result.node.meetsMinimum).toBe(false)
+    })
+
     it('returns failure when ccs is not installed', async () => {
-      mockExecSync.mockImplementationOnce(() => {
-        throw new Error('command not found')
-      })
+      mockExecSync
+        .mockReturnValueOnce('v20.10.0')
+        .mockImplementationOnce(() => {
+          throw new Error('command not found')
+        })
 
       const result = await checkPrerequisites()
 
@@ -72,6 +93,7 @@ describe('prerequisites', () => {
 
     it('returns failure when ccs version is too low', async () => {
       mockExecSync
+        .mockReturnValueOnce('v20.10.0')
         .mockReturnValueOnce('CCS (Claude Code Switch) v7.50.0')
         .mockReturnValueOnce('2.1.72 (Claude Code)')
 
@@ -83,6 +105,7 @@ describe('prerequisites', () => {
 
     it('returns failure when claude is not installed', async () => {
       mockExecSync
+        .mockReturnValueOnce('v20.10.0')
         .mockReturnValueOnce('CCS (Claude Code Switch) v7.65.3')
         .mockImplementationOnce(() => {
           throw new Error('command not found')

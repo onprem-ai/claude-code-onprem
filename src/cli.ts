@@ -11,7 +11,7 @@ import {
   uninstallPlugin,
   setPluginApiKey,
 } from './plugins.js'
-import { MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
+import { MIN_NODE_VERSION, MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
 import type { ModelInfo } from './types.js'
 
 function exitOnCancel<T>(value: T | symbol): T {
@@ -34,6 +34,10 @@ export async function run(): Promise<void> {
   if (!prereqs.success) {
     prereqSpinner.stop('Prerequisites check failed')
 
+    if (!prereqs.node.meetsMinimum) {
+      p.log.error(`Node.js ${prereqs.node.version || 'unknown'} is below minimum ${MIN_NODE_VERSION}. Please upgrade Node.js.`)
+    }
+
     if (!prereqs.ccs.installed) {
       p.log.error(`CCS is not installed. Install it with: npm i -g @kaitranntt/ccs`)
     } else if (!prereqs.ccs.meetsMinimum) {
@@ -50,7 +54,7 @@ export async function run(): Promise<void> {
     process.exit(1)
   }
 
-  prereqSpinner.stop(`Prerequisites OK (CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
+  prereqSpinner.stop(`Prerequisites OK (Node ${prereqs.node.version}, CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
 
   // Load existing profile for prefilling
   const existingProfile = await loadProfile(DEFAULTS.profileName)
