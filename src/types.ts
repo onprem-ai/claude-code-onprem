@@ -6,6 +6,8 @@ export interface CcsProfile {
     ANTHROPIC_BASE_URL: string
     ANTHROPIC_AUTH_TOKEN: string
     ANTHROPIC_MODEL: string
+    // Allow additional env vars (e.g., EXA_API_KEY, BRAVE_API_KEY)
+    [key: string]: string
   }
 }
 

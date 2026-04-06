@@ -45,3 +45,28 @@ export async function createProfile(name: string, options: ProfileOptions): Prom
 
   await writeJsonFile(getProfilePath(name), profile)
 }
+
+export async function getProfileEnvVar(name: string, envVar: string): Promise<string | null> {
+  const profile = await loadProfile(name)
+  return profile?.env?.[envVar] || null
+}
+
+export async function setProfileEnvVar(name: string, envVar: string, value: string): Promise<void> {
+  let profile = await loadProfile(name)
+  if (!profile) {
+    // Create minimal profile if it doesn't exist
+    profile = { env: {} } as CcsProfile
+  }
+  profile.env = profile.env || {}
+  profile.env[envVar] = value
+  await writeJsonFile(getProfilePath(name), profile)
+}
+
+export async function removeProfileEnvVar(name: string, envVar: string): Promise<void> {
+  const profile = await loadProfile(name)
+  if (!profile?.env) return
+  if (envVar in profile.env) {
+    delete profile.env[envVar]
+    await writeJsonFile(getProfilePath(name), profile)
+  }
+}

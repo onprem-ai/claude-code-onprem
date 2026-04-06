@@ -1,7 +1,9 @@
 import { execSync } from 'child_process'
 import { homedir } from 'os'
 import { join } from 'path'
-import { readFile, writeFile, access } from 'fs/promises'
+import { access } from 'fs/promises'
+import { getProfileEnvVar, setProfileEnvVar, removeProfileEnvVar } from './profile.js'
+import { DEFAULTS } from './constants.js'
 
 const MARKETPLACE_NAME = 'claude-code-onprem'
 const MARKETPLACE_REPO = 'onprem-ai/claude-code-onprem'
@@ -61,39 +63,11 @@ export async function uninstallPlugin(pluginName: string): Promise<{ success: bo
   return { success: true }
 }
 
-function getClaudeSettingsPath(): string {
-  return join(getHome(), '.claude', 'settings.local.json')
-}
-
-interface ClaudeSettings {
-  env?: Record<string, string>
-  [key: string]: unknown
-}
-
-async function readClaudeSettings(): Promise<ClaudeSettings> {
-  try {
-    const content = await readFile(getClaudeSettingsPath(), 'utf-8')
-    return JSON.parse(content)
-  } catch {
-    return {}
-  }
-}
-
-async function writeClaudeSettings(settings: ClaudeSettings): Promise<void> {
-  const { mkdir } = await import('fs/promises')
-  await mkdir(join(getHome(), '.claude'), { recursive: true })
-  await writeFile(getClaudeSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
-}
-
+// API key management - stores in CCS profile so env vars are available when running `ccs onprem`
 export async function getInstalledPluginApiKey(pluginName: string, keyName: string): Promise<string | null> {
   try {
-    // Read from ~/.claude/settings.local.json env section
-    const settings = await readClaudeSettings()
-    const value = settings.env?.[keyName]
-    if (value && !value.startsWith('${')) {
-      return value
-    }
-    return null
+    const value = await getProfileEnvVar(DEFAULTS.profileName, keyName)
+    return value
   } catch {
     return null
   }
@@ -105,11 +79,8 @@ export async function setPluginApiKey(
   value: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Write to ~/.claude/settings.local.json env section
-    const settings = await readClaudeSettings()
-    settings.env = settings.env || {}
-    settings.env[envVarName] = value
-    await writeClaudeSettings(settings)
+    // Write to CCS profile env section - available when running `ccs onprem`
+    await setProfileEnvVar(DEFAULTS.profileName, envVarName, value)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -120,15 +91,7 @@ export async function removePluginApiKey(
   envVarName: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const settings = await readClaudeSettings()
-    if (settings.env && envVarName in settings.env) {
-      delete settings.env[envVarName]
-      // Clean up empty env object
-      if (Object.keys(settings.env).length === 0) {
-        delete settings.env
-      }
-      await writeClaudeSettings(settings)
-    }
+    await removeProfileEnvVar(DEFAULTS.profileName, envVarName)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
