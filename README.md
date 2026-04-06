@@ -7,7 +7,7 @@ Interactive setup wizard for on-prem Claude Code with CCS profile management and
 ## Quick Start
 
 ```bash
-npx claude-code-onprem
+npx claude-code-onprem@latest
 ```
 
 ## What It Configures

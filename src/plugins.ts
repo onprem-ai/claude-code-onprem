@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import { homedir } from 'os'
 import { join } from 'path'
-import { readFile, access } from 'fs/promises'
+import { readFile, writeFile, access } from 'fs/promises'
 
 const MARKETPLACE_NAME = 'claude-code-onprem'
 const MARKETPLACE_REPO = 'onprem-ai/claude-code-onprem'
@@ -93,5 +93,37 @@ export async function getInstalledPluginApiKey(pluginName: string, keyName: stri
     return null
   } catch {
     return null
+  }
+}
+
+export async function setPluginApiKey(
+  pluginName: string,
+  placeholder: string,
+  value: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cacheDir = getPluginsCacheDir()
+    const pluginDir = join(cacheDir, pluginName)
+
+    const { readdirSync } = await import('fs')
+    const versions = readdirSync(pluginDir)
+    if (versions.length === 0) {
+      return { success: false, error: 'Plugin not found' }
+    }
+
+    const mcpPath = join(pluginDir, versions[0], '.mcp.json')
+    const content = await readFile(mcpPath, 'utf-8')
+
+    // Replace placeholder with actual value
+    const updated = content.replace(placeholder, value)
+
+    if (updated === content) {
+      return { success: false, error: `Placeholder ${placeholder} not found` }
+    }
+
+    await writeFile(mcpPath, updated, 'utf-8')
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 }

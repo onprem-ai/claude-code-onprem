@@ -9,6 +9,7 @@ import {
   pluginInstalled,
   installPlugin,
   uninstallPlugin,
+  setPluginApiKey,
 } from './plugins.js'
 import { MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
 import type { ModelInfo } from './types.js'
@@ -42,7 +43,7 @@ export async function run(): Promise<void> {
     if (!prereqs.claude.installed) {
       p.log.error(`Claude Code is not installed. Install it with: npm i -g @anthropic-ai/claude-code`)
     } else if (!prereqs.claude.meetsMinimum) {
-      p.log.error(`Claude Code ${prereqs.claude.version} is below minimum ${MIN_CLAUDE_VERSION}. Upgrade with: npm update -g @anthropic-ai/claude-code`)
+      p.log.error(`Claude Code ${prereqs.claude.version} is below minimum ${MIN_CLAUDE_VERSION}. Upgrade with: claude update`)
     }
 
     p.outro('Setup cancelled.')
@@ -161,17 +162,32 @@ export async function run(): Promise<void> {
   p.log.step('Web Search Providers')
   p.log.message('Claude Code can use web search to look up documentation,\nfind code examples, and research solutions.')
 
+  // Check what's already installed to prefill selection
+  const exaInstalled = await pluginInstalled('websearch-exa')
+  const braveInstalled = await pluginInstalled('websearch-brave')
+
+  let initialSelection: string[]
+  if (exaInstalled || braveInstalled) {
+    // Prefill with what's installed
+    initialSelection = []
+    if (exaInstalled) initialSelection.push('exa')
+    if (braveInstalled) initialSelection.push('brave')
+  } else {
+    // Nothing installed, default to Exa
+    initialSelection = ['exa']
+  }
+
   const selectedProviders = exitOnCancel(await p.multiselect({
     message: 'Which providers would you like to configure?',
     options: [
       { value: 'exa', label: 'Exa (code search, API docs, technical content)' },
       { value: 'brave', label: 'Brave (privacy-focused, news, general research)' },
     ],
+    initialValues: initialSelection,
     required: false,
   }))
 
   let anyMcpConfigured = false
-  const envVarsToSet: string[] = []
 
   // Check for plugins to uninstall (not selected but installed)
   if (!selectedProviders.includes('exa') && await pluginInstalled('websearch-exa')) {
@@ -245,15 +261,24 @@ export async function run(): Promise<void> {
         p.log.success('Keeping existing Exa plugin')
         anyMcpConfigured = true
       } else {
-        // Reinstall
+        // Get existing key before reinstall (reinstall overwrites .mcp.json)
+        const { getInstalledPluginApiKey } = await import('./plugins.js')
+        const existingKey = await getInstalledPluginApiKey('websearch-exa', 'x-api-key')
+
         const spinner = p.spinner()
         spinner.start('Reinstalling Exa plugin...')
         const result = await installPlugin('websearch-exa')
         if (result.success) {
-          spinner.stop('Exa plugin reinstalled')
-          p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
-          anyMcpConfigured = true
-          envVarsToSet.push('EXA_API_KEY')
+          if (existingKey) {
+            // Restore existing key
+            await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', existingKey)
+            spinner.stop('Exa plugin reinstalled')
+            p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
+            anyMcpConfigured = true
+          } else {
+            spinner.stop('Exa plugin reinstalled (API key not found)')
+            p.log.warning('Please run setup again to configure the API key')
+          }
         } else {
           spinner.stop(`Failed: ${result.error}`)
         }
@@ -280,11 +305,17 @@ export async function run(): Promise<void> {
           installSpinner.start('Installing Exa plugin...')
           const result = await installPlugin('websearch-exa')
           if (result.success) {
-            installSpinner.stop('Exa plugin installed')
-            p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
-            anyMcpConfigured = true
-            envVarsToSet.push(`EXA_API_KEY=${exaKey}`)
-            exaConfigured = true
+            // Set API key in plugin's .mcp.json
+            const keyResult = await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', exaKey)
+            if (keyResult.success) {
+              installSpinner.stop('Exa plugin installed')
+              p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
+              anyMcpConfigured = true
+              exaConfigured = true
+            } else {
+              installSpinner.stop(`Installed but failed to set API key: ${keyResult.error}`)
+              exaConfigured = true
+            }
           } else {
             installSpinner.stop(`Failed: ${result.error}`)
             exaConfigured = true // Exit loop on install failure
@@ -327,15 +358,24 @@ export async function run(): Promise<void> {
         p.log.success('Keeping existing Brave plugin')
         anyMcpConfigured = true
       } else {
-        // Reinstall
+        // Get existing key before reinstall (reinstall overwrites .mcp.json)
+        const { getInstalledPluginApiKey } = await import('./plugins.js')
+        const existingKey = await getInstalledPluginApiKey('websearch-brave', 'BRAVE_API_KEY')
+
         const spinner = p.spinner()
         spinner.start('Reinstalling Brave plugin...')
         const result = await installPlugin('websearch-brave')
         if (result.success) {
-          spinner.stop('Brave plugin reinstalled')
-          p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
-          anyMcpConfigured = true
-          envVarsToSet.push('BRAVE_API_KEY')
+          if (existingKey) {
+            // Restore existing key
+            await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', existingKey)
+            spinner.stop('Brave plugin reinstalled')
+            p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+            anyMcpConfigured = true
+          } else {
+            spinner.stop('Brave plugin reinstalled (API key not found)')
+            p.log.warning('Please run setup again to configure the API key')
+          }
         } else {
           spinner.stop(`Failed: ${result.error}`)
         }
@@ -362,11 +402,17 @@ export async function run(): Promise<void> {
           installSpinner.start('Installing Brave plugin...')
           const result = await installPlugin('websearch-brave')
           if (result.success) {
-            installSpinner.stop('Brave plugin installed')
-            p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
-            anyMcpConfigured = true
-            envVarsToSet.push(`BRAVE_API_KEY=${braveKey}`)
-            braveConfigured = true
+            // Set API key in plugin's .mcp.json
+            const keyResult = await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', braveKey)
+            if (keyResult.success) {
+              installSpinner.stop('Brave plugin installed')
+              p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+              anyMcpConfigured = true
+              braveConfigured = true
+            } else {
+              installSpinner.stop(`Installed but failed to set API key: ${keyResult.error}`)
+              braveConfigured = true
+            }
           } else {
             installSpinner.stop(`Failed: ${result.error}`)
             braveConfigured = true // Exit loop on install failure
@@ -417,18 +463,6 @@ export async function run(): Promise<void> {
     }
   } else {
     p.log.info('Keeping CCS built-in websearch enabled')
-  }
-
-  // Show environment variables that need to be set
-  if (envVarsToSet.length > 0) {
-    p.log.step('Environment Variables')
-    p.log.message('Add these to your shell profile (~/.zshrc or ~/.bashrc):')
-    p.log.message('')
-    for (const envVar of envVarsToSet) {
-      p.log.message(`  export ${envVar}`)
-    }
-    p.log.message('')
-    p.log.warning('Restart your terminal after adding these variables.')
   }
 
   // Done
