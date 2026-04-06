@@ -6,6 +6,12 @@ Interactive setup wizard for on-prem Claude Code with CCS profile management and
 
 ## Quick Start
 
+1. Install prerequisites (if not already installed):
+- [Claude Code](https://github.com/anthropics/claude-code) >= 2.1.72
+- Node.js >= 18 (install via [fnm](https://github.com/Schniz/fnm) - fast, cross-platform)
+- [CCS](https://github.com/kaitranntt/ccs) >= 7.65.3
+
+2. Run setup wizard:
 ```bash
 npx claude-code-onprem@latest
 ```
@@ -15,11 +21,6 @@ npx claude-code-onprem@latest
 1. **CCS Profile** - Creates `~/.ccs/onprem.settings.json` with your LLM endpoint
 2. **Web Search MCPs** - Optionally configures Exa and/or Brave search
 3. **CCS Config** - Disables built-in websearch when MCP is configured
-
-## Prerequisites
-
-- [Claude Code](https://github.com/anthropics/claude-code) >= 2.1.72
-- [CCS](https://github.com/kaitranntt/ccs) >= 7.65.3
 
 ## Why Web Search?
 
