@@ -78,7 +78,7 @@ export async function run(): Promise<void> {
   while (true) {
     endpoint = exitOnCancel(await p.text({
       message: 'What is your LLM endpoint URL?',
-      placeholder: 'https://llm-api2.bunker.onprem.ai',
+      placeholder: 'http://localhost:8000/v1',
       initialValue: prefillEndpoint,
       validate: (value) => {
         if (!value) return 'Endpoint URL is required'
