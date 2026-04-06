@@ -152,6 +152,17 @@ export async function run(): Promise<void> {
       model: selectedModel,
     })
     profileSpinner.stop('Profile created at ~/.ccs/onprem.settings.json')
+
+    // Register the profile with CCS
+    const registerSpinner = p.spinner()
+    registerSpinner.start('Registering profile with CCS...')
+    const { execSync } = await import('child_process')
+    try {
+      execSync('ccs api discover --register', { stdio: 'pipe' })
+      registerSpinner.stop('Profile registered')
+    } catch {
+      registerSpinner.stop('Profile created (manual registration may be needed: ccs api discover --register)')
+    }
   } catch (error) {
     profileSpinner.stop('Failed to create profile')
     p.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
