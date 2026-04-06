@@ -1,0 +1,9 @@
+{
+  "exa": {
+    "type": "http",
+    "url": "https://mcp.exa.ai/mcp?tools=get_code_context_exa,web_search_exa,web_fetch_exa",
+    "headers": {
+      "x-api-key": "${EXA_API_KEY}"
+    }
+  }
+}

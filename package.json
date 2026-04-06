@@ -1,0 +1,61 @@
+{
+  "name": "claude-code-onprem",
+  "version": "0.1.0",
+  "description": "Interactive setup wizard for on-prem Claude Code with CCS profile management and web search providers",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "claude-code-onprem": "./bin/claude-code-onprem.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "plugins"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build && npm run test:run",
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onprem-ai/claude-code-onprem.git"
+  },
+  "homepage": "https://github.com/onprem-ai/claude-code-onprem#readme",
+  "bugs": {
+    "url": "https://github.com/onprem-ai/claude-code-onprem/issues"
+  },
+  "author": "onprem-ai",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ccs",
+    "onprem",
+    "llm",
+    "setup",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "semver": "^7.6.0",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/semver": "^7.5.0",
+    "@vitest/coverage-v8": "^1.6.1",
+    "msw": "^2.2.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}
