@@ -61,34 +61,37 @@ export async function uninstallPlugin(pluginName: string): Promise<{ success: bo
   return { success: true }
 }
 
+function getClaudeSettingsPath(): string {
+  return join(getHome(), '.claude', 'settings.local.json')
+}
+
+interface ClaudeSettings {
+  env?: Record<string, string>
+  [key: string]: unknown
+}
+
+async function readClaudeSettings(): Promise<ClaudeSettings> {
+  try {
+    const content = await readFile(getClaudeSettingsPath(), 'utf-8')
+    return JSON.parse(content)
+  } catch {
+    return {}
+  }
+}
+
+async function writeClaudeSettings(settings: ClaudeSettings): Promise<void> {
+  const { mkdir } = await import('fs/promises')
+  await mkdir(join(getHome(), '.claude'), { recursive: true })
+  await writeFile(getClaudeSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
+}
+
 export async function getInstalledPluginApiKey(pluginName: string, keyName: string): Promise<string | null> {
   try {
-    // Check in plugin cache directory
-    const cacheDir = getPluginsCacheDir()
-    const pluginDir = join(cacheDir, pluginName)
-
-    // Find the version directory (there should be one)
-    const { readdirSync } = await import('fs')
-    const versions = readdirSync(pluginDir)
-    if (versions.length === 0) return null
-
-    const mcpPath = join(pluginDir, versions[0], '.mcp.json')
-    const content = await readFile(mcpPath, 'utf-8')
-    const config = JSON.parse(content)
-
-    // Check for key in headers (Exa style) or env (Brave style)
-    for (const server of Object.values(config) as any[]) {
-      if (server.headers?.[keyName]) {
-        const value = server.headers[keyName]
-        // Skip if it's still a placeholder
-        if (value.startsWith('${')) return null
-        return value
-      }
-      if (server.env?.[keyName]) {
-        const value = server.env[keyName]
-        if (value.startsWith('${')) return null
-        return value
-      }
+    // Read from ~/.claude/settings.local.json env section
+    const settings = await readClaudeSettings()
+    const value = settings.env?.[keyName]
+    if (value && !value.startsWith('${')) {
+      return value
     }
     return null
   } catch {
@@ -98,30 +101,34 @@ export async function getInstalledPluginApiKey(pluginName: string, keyName: stri
 
 export async function setPluginApiKey(
   pluginName: string,
-  placeholder: string,
+  envVarName: string,
   value: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const cacheDir = getPluginsCacheDir()
-    const pluginDir = join(cacheDir, pluginName)
+    // Write to ~/.claude/settings.local.json env section
+    const settings = await readClaudeSettings()
+    settings.env = settings.env || {}
+    settings.env[envVarName] = value
+    await writeClaudeSettings(settings)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
 
-    const { readdirSync } = await import('fs')
-    const versions = readdirSync(pluginDir)
-    if (versions.length === 0) {
-      return { success: false, error: 'Plugin not found' }
+export async function removePluginApiKey(
+  envVarName: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const settings = await readClaudeSettings()
+    if (settings.env && envVarName in settings.env) {
+      delete settings.env[envVarName]
+      // Clean up empty env object
+      if (Object.keys(settings.env).length === 0) {
+        delete settings.env
+      }
+      await writeClaudeSettings(settings)
     }
-
-    const mcpPath = join(pluginDir, versions[0], '.mcp.json')
-    const content = await readFile(mcpPath, 'utf-8')
-
-    // Replace placeholder with actual value
-    const updated = content.replace(placeholder, value)
-
-    if (updated === content) {
-      return { success: false, error: `Placeholder ${placeholder} not found` }
-    }
-
-    await writeFile(mcpPath, updated, 'utf-8')
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }

@@ -10,6 +10,7 @@ import {
   installPlugin,
   uninstallPlugin,
   setPluginApiKey,
+  removePluginApiKey,
 } from './plugins.js'
 import { MIN_NODE_VERSION, MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
 import type { ModelInfo } from './types.js'
@@ -215,6 +216,7 @@ export async function run(): Promise<void> {
       spinner.start('Uninstalling Exa plugin...')
       const result = await uninstallPlugin('websearch-exa')
       if (result.success) {
+        await removePluginApiKey('EXA_API_KEY')
         spinner.stop('Exa plugin uninstalled')
       } else {
         spinner.stop(`Failed to uninstall: ${result.error}`)
@@ -232,6 +234,7 @@ export async function run(): Promise<void> {
       spinner.start('Uninstalling Brave plugin...')
       const result = await uninstallPlugin('websearch-brave')
       if (result.success) {
+        await removePluginApiKey('BRAVE_API_KEY')
         spinner.stop('Brave plugin uninstalled')
       } else {
         spinner.stop(`Failed to uninstall: ${result.error}`)
@@ -278,7 +281,7 @@ export async function run(): Promise<void> {
       } else {
         // Get existing key before reinstall (reinstall overwrites .mcp.json)
         const { getInstalledPluginApiKey } = await import('./plugins.js')
-        const existingKey = await getInstalledPluginApiKey('websearch-exa', 'x-api-key')
+        const existingKey = await getInstalledPluginApiKey('websearch-exa', 'EXA_API_KEY')
 
         const spinner = p.spinner()
         spinner.start('Reinstalling Exa plugin...')
@@ -286,7 +289,7 @@ export async function run(): Promise<void> {
         if (result.success) {
           if (existingKey) {
             // Restore existing key
-            await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', existingKey)
+            await setPluginApiKey('websearch-exa', 'EXA_API_KEY', existingKey)
             spinner.stop('Exa plugin reinstalled')
             p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
             anyMcpConfigured = true
@@ -307,7 +310,7 @@ export async function run(): Promise<void> {
 
               if (testResult.success) {
                 testSpinner.stop('Connected successfully')
-                await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', exaKey)
+                await setPluginApiKey('websearch-exa', 'EXA_API_KEY', exaKey)
                 p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
                 anyMcpConfigured = true
                 keyConfigured = true
@@ -351,7 +354,7 @@ export async function run(): Promise<void> {
           const result = await installPlugin('websearch-exa')
           if (result.success) {
             // Set API key in plugin's .mcp.json
-            const keyResult = await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', exaKey)
+            const keyResult = await setPluginApiKey('websearch-exa', 'EXA_API_KEY', exaKey)
             if (keyResult.success) {
               installSpinner.stop('Exa plugin installed')
               p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
@@ -413,7 +416,7 @@ export async function run(): Promise<void> {
         if (result.success) {
           if (existingKey) {
             // Restore existing key
-            await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', existingKey)
+            await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', existingKey)
             spinner.stop('Brave plugin reinstalled')
             p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
             anyMcpConfigured = true
@@ -434,7 +437,7 @@ export async function run(): Promise<void> {
 
               if (testResult.success) {
                 testSpinner.stop('Connected successfully')
-                await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', braveKey)
+                await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', braveKey)
                 p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
                 anyMcpConfigured = true
                 keyConfigured = true
@@ -478,7 +481,7 @@ export async function run(): Promise<void> {
           const result = await installPlugin('websearch-brave')
           if (result.success) {
             // Set API key in plugin's .mcp.json
-            const keyResult = await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', braveKey)
+            const keyResult = await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', braveKey)
             if (keyResult.success) {
               installSpinner.stop('Brave plugin installed')
               p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
