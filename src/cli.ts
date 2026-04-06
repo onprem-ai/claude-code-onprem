@@ -276,8 +276,38 @@ export async function run(): Promise<void> {
             p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
             anyMcpConfigured = true
           } else {
-            spinner.stop('Exa plugin reinstalled (API key not found)')
-            p.log.warning('Please run setup again to configure the API key')
+            // No existing key found, prompt for one
+            spinner.stop('Exa plugin reinstalled')
+
+            let keyConfigured = false
+            while (!keyConfigured) {
+              const exaKey = exitOnCancel(await p.password({
+                message: 'Exa API key (from dashboard.exa.ai)',
+                validate: (value) => value ? undefined : 'API key is required',
+              }))
+
+              const testSpinner = p.spinner()
+              testSpinner.start('Testing Exa connection...')
+              const testResult = await testExaConnection(exaKey)
+
+              if (testResult.success) {
+                testSpinner.stop('Connected successfully')
+                await setPluginApiKey('websearch-exa', '${EXA_API_KEY}', exaKey)
+                p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
+                anyMcpConfigured = true
+                keyConfigured = true
+              } else {
+                testSpinner.stop(`Failed: ${testResult.error}`)
+                const action = exitOnCancel(await p.select({
+                  message: 'What would you like to do?',
+                  options: [
+                    { value: 'retry', label: 'Enter a different API key' },
+                    { value: 'skip', label: 'Skip Exa setup' },
+                  ],
+                })) as 'retry' | 'skip'
+                if (action === 'skip') keyConfigured = true
+              }
+            }
           }
         } else {
           spinner.stop(`Failed: ${result.error}`)
@@ -373,8 +403,38 @@ export async function run(): Promise<void> {
             p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
             anyMcpConfigured = true
           } else {
-            spinner.stop('Brave plugin reinstalled (API key not found)')
-            p.log.warning('Please run setup again to configure the API key')
+            // No existing key found, prompt for one
+            spinner.stop('Brave plugin reinstalled')
+
+            let keyConfigured = false
+            while (!keyConfigured) {
+              const braveKey = exitOnCancel(await p.password({
+                message: 'Brave API key (from api-dashboard.search.brave.com)',
+                validate: (value) => value ? undefined : 'API key is required',
+              }))
+
+              const testSpinner = p.spinner()
+              testSpinner.start('Testing Brave connection...')
+              const testResult = await testBraveConnection(braveKey)
+
+              if (testResult.success) {
+                testSpinner.stop('Connected successfully')
+                await setPluginApiKey('websearch-brave', '${BRAVE_API_KEY}', braveKey)
+                p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+                anyMcpConfigured = true
+                keyConfigured = true
+              } else {
+                testSpinner.stop(`Failed: ${testResult.error}`)
+                const action = exitOnCancel(await p.select({
+                  message: 'What would you like to do?',
+                  options: [
+                    { value: 'retry', label: 'Enter a different API key' },
+                    { value: 'skip', label: 'Skip Brave setup' },
+                  ],
+                })) as 'retry' | 'skip'
+                if (action === 'skip') keyConfigured = true
+              }
+            }
           }
         } else {
           spinner.stop(`Failed: ${result.error}`)
