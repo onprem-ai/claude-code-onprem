@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts'
+import pc from 'picocolors'
 import { execSync } from 'child_process'
 import { checkPrerequisites } from './prerequisites.js'
 import { fetchModels, testExaConnection, testBraveConnection } from './models.js'
@@ -781,6 +782,6 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
   // Done
   p.log.success('Setup complete!')
-  p.log.message('\nTo start Claude Code with on-prem:\n  ccs onprem')
+  p.note(pc.green('ccs onprem'), 'Run this to start Claude Code with on-prem LLM')
   p.outro('Happy coding!')
 }
