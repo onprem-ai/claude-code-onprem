@@ -4,7 +4,7 @@ Super easy setup wizard for using Claude Code with on-premise LLMs.
 
 CCS (Claude Code Switch) is being used so that your original configs remain intact and available while a separate config profile for on-premise LLMs will be added: You can later run `claude` as you know it or `ccs onprem` for running claude with on-premise LLMs. 
 
-> **Disclaimer:** This is an unofficial community project. We are not affiliated with Anthropic or Claude Code in any way. We're just enthusiastic community members who love building with Claude Code and focus on privacy and sovereign AI solutions. Read more on (our website)[https://onprem.ai].
+> **Disclaimer:** This is an unofficial community project. We are not affiliated with Anthropic or Claude Code in any way. We're just enthusiastic community members who love building with Claude Code and focus on privacy / sovereign AI. Read more on (our website)[https://onprem.ai].
 
 ## Quick Start
 
