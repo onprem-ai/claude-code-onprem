@@ -38,8 +38,8 @@ Strong web search is critical for on-prem AI coding. On-premise LLMs are typical
 
 | Provider | Strengths |
 |----------|-----------|
-| **Exa** | Code search, API docs |
-| **Brave** | Privacy, news/media |
+| [**Exa**](https://exa.ai/) | Code search, API docs |
+| [**Brave**](https://brave.com/search/api/) | Privacy, news/media |
 
 
 ## CLI Options
