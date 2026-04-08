@@ -1,5 +1,6 @@
 # claude-code-onprem
 
+[![npm version](https://img.shields.io/npm/v/claude-code-onprem.svg)](https://www.npmjs.com/package/claude-code-onprem)
 [![CI](https://github.com/onprem-ai/claude-code-onprem/actions/workflows/ci.yml/badge.svg)](https://github.com/onprem-ai/claude-code-onprem/actions/workflows/ci.yml)
 
 Super easy setup wizard for using Claude Code with on-premise LLMs. 
@@ -13,7 +14,6 @@ CCS (Claude Code Switch) is being used so that your original configs remain inta
 1. Install prerequisites (if not already installed):
 - [Claude Code](https://github.com/anthropics/claude-code) >= 2.1.72
 - Node.js >= 18 (install via [fnm](https://github.com/Schniz/fnm) - fast, cross-platform)
-- [CCS](https://github.com/kaitranntt/ccs) >= 7.65.3
 
 2. Run setup wizard:
 ```bash
