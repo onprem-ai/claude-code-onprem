@@ -1,6 +1,6 @@
 {
   "name": "claude-code-onprem",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Interactive setup wizard for on-prem Claude Code with CCS profile management and web search providers",
   "type": "module",
   "main": "dist/index.js",
