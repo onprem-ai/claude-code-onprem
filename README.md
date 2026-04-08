@@ -20,6 +20,11 @@ Your original Claude Code configs remain intact and available while a separate c
 npx claude-code-onprem@latest
 ```
 
+3. Start Claude Code with On-prem LLM:
+```bash
+ccs onprem
+```
+
 ## What It Configures
 
 1. **CCS Profile** - Creates `~/.ccs/onprem.settings.json` with your LLM endpoint
@@ -75,12 +80,6 @@ In non-interactive mode (`-y`):
 - Auto-selects web search providers based on which API keys are provided
 - Auto-selects the first available model if `--model` is not specified
 - Keeps existing plugin installations
-
-## After Setup
-
-```bash
-ccs onprem
-```
 
 ## License
 
