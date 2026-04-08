@@ -1,4 +1,5 @@
 import * as p from '@clack/prompts'
+import { execSync } from 'child_process'
 import { checkPrerequisites } from './prerequisites.js'
 import { fetchModels, testExaConnection, testBraveConnection } from './models.js'
 import { loadProfile, createProfile } from './profile.js'
@@ -66,6 +67,15 @@ function exitOnCancel<T>(value: T | symbol): T {
   return value
 }
 
+function runCommand(command: string): { success: boolean; error?: string } {
+  try {
+    execSync(command, { stdio: 'inherit' })
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 export async function run(cliOptions?: CliOptions): Promise<void> {
   const options = cliOptions ?? parseArgs()
 
@@ -74,33 +84,106 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
   // Step 1: Check prerequisites
   const prereqSpinner = p.spinner()
   prereqSpinner.start('Checking prerequisites...')
+  let prereqSpinnerActive = true
 
-  const prereqs = await checkPrerequisites()
+  let prereqs = await checkPrerequisites()
 
-  if (!prereqs.success) {
+  // Node.js check - cannot auto-install, must fail
+  if (!prereqs.node.meetsMinimum) {
     prereqSpinner.stop('Prerequisites check failed')
-
-    if (!prereqs.node.meetsMinimum) {
-      p.log.error(`Node.js ${prereqs.node.version || 'unknown'} is below minimum ${MIN_NODE_VERSION}. Please upgrade Node.js.`)
-    }
-
-    if (!prereqs.ccs.installed) {
-      p.log.error(`CCS is not installed. Install it with: npm i -g @kaitranntt/ccs`)
-    } else if (!prereqs.ccs.meetsMinimum) {
-      p.log.error(`CCS ${prereqs.ccs.version} is below minimum ${MIN_CCS_VERSION}. Upgrade with: npm update -g @kaitranntt/ccs`)
-    }
-
-    if (!prereqs.claude.installed) {
-      p.log.error(`Claude Code is not installed. Install it with: npm i -g @anthropic-ai/claude-code`)
-    } else if (!prereqs.claude.meetsMinimum) {
-      p.log.error(`Claude Code ${prereqs.claude.version} is below minimum ${MIN_CLAUDE_VERSION}. Upgrade with: claude update`)
-    }
-
+    p.log.error(`Node.js ${prereqs.node.version || 'unknown'} is below minimum ${MIN_NODE_VERSION}. Please upgrade Node.js.`)
     p.outro('Setup cancelled.')
     process.exit(1)
   }
 
-  prereqSpinner.stop(`Prerequisites OK (Node ${prereqs.node.version}, CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
+  // CCS check - offer to install/update
+  if (!prereqs.ccs.installed) {
+    prereqSpinner.stop('CCS not found')
+    prereqSpinnerActive = false
+
+    const install = options.yes || exitOnCancel(await p.confirm({
+      message: 'CCS is not installed. Would you like to install it now?',
+      initialValue: true,
+    }))
+
+    if (install) {
+      const installSpinner = p.spinner()
+      installSpinner.start('Installing CCS...')
+      const result = runCommand('npm i -g @kaitranntt/ccs')
+      if (result.success) {
+        installSpinner.stop('CCS installed')
+        prereqs = await checkPrerequisites()
+      } else {
+        installSpinner.stop('Failed to install CCS')
+        p.log.error('Try manually: npm i -g @kaitranntt/ccs')
+        p.outro('Setup cancelled.')
+        process.exit(1)
+      }
+    } else {
+      p.outro('Setup cancelled.')
+      process.exit(1)
+    }
+  } else if (!prereqs.ccs.meetsMinimum) {
+    prereqSpinner.stop(`CCS ${prereqs.ccs.version} is outdated (minimum: ${MIN_CCS_VERSION})`)
+    prereqSpinnerActive = false
+
+    const update = options.yes || exitOnCancel(await p.confirm({
+      message: `Would you like to update CCS to the latest version?`,
+      initialValue: true,
+    }))
+
+    if (update) {
+      const updateSpinner = p.spinner()
+      updateSpinner.start('Updating CCS...')
+      const result = runCommand('npm update -g @kaitranntt/ccs')
+      if (result.success) {
+        updateSpinner.stop('CCS updated')
+        prereqs = await checkPrerequisites()
+      } else {
+        updateSpinner.stop('Failed to update CCS')
+        p.log.error('Try manually: npm update -g @kaitranntt/ccs')
+        p.outro('Setup cancelled.')
+        process.exit(1)
+      }
+    } else {
+      p.outro('Setup cancelled.')
+      process.exit(1)
+    }
+  }
+
+  // Claude Code check - error out with instructions (npm install is deprecated)
+  if (!prereqs.claude.installed) {
+    if (prereqSpinnerActive) {
+      prereqSpinner.stop('Claude Code not found')
+      prereqSpinnerActive = false
+    }
+    p.log.error('Claude Code is not installed.')
+    p.log.message('See install instructions: https://github.com/anthropics/claude-code')
+    p.outro('Setup cancelled.')
+    process.exit(1)
+  } else if (!prereqs.claude.meetsMinimum) {
+    if (prereqSpinnerActive) {
+      prereqSpinner.stop(`Claude Code ${prereqs.claude.version} is outdated`)
+      prereqSpinnerActive = false
+    }
+    p.log.error(`Claude Code ${prereqs.claude.version} is below minimum ${MIN_CLAUDE_VERSION}. Upgrade with: claude update`)
+    p.outro('Setup cancelled.')
+    process.exit(1)
+  }
+
+  // Final check - all prerequisites should be met now
+  if (!prereqs.success) {
+    if (prereqSpinnerActive) prereqSpinner.stop('Prerequisites check failed')
+    p.log.error('Prerequisites still not met after installation/update attempts.')
+    p.outro('Setup cancelled.')
+    process.exit(1)
+  }
+
+  if (prereqSpinnerActive) {
+    prereqSpinner.stop(`Prerequisites OK (Node ${prereqs.node.version}, CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
+  } else {
+    p.log.success(`Prerequisites OK (Node ${prereqs.node.version}, CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
+  }
 
   // Load existing profile for prefilling
   const existingProfile = await loadProfile(DEFAULTS.profileName)
