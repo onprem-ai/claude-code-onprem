@@ -7,7 +7,7 @@ Super easy setup wizard for using Claude Code with on-premise LLMs.
 
 Your original Claude Code configs remain intact and available while a separate config profile for on-premise LLMs will be added with [CCS](https://github.com/kaitranntt/ccs) (Claude Code Switch). This ensures that you can keep running `claude` as you know it, while having a separate `ccs onprem` command for running Claude Code with on-premise LLMs. 
 
-> **Disclaimer:** This is an unofficial community project. We are not affiliated with Anthropic or Claude Code in any way. We're just enthusiastic community members who love building with Claude Code and focus on privacy / sovereign AI. Read more on (our website)[https://onprem.ai].
+> **Disclaimer:** This is an unofficial community project. We are not affiliated with Anthropic or Claude Code in any way. We're just enthusiastic community members who love building with Claude Code and focus on privacy / sovereign AI. Read more on [onprem.ai](https://onprem.ai).
 
 ## Quick Start
 
@@ -30,6 +30,18 @@ ccs onprem
 1. **CCS Profile** - Creates `~/.ccs/onprem.settings.json` with your LLM endpoint
 2. **Web Search MCPs** - Optionally configures advanced Exa and/or Brave search MCPs
 3. **CCS Config** - Also optionally disables built-in CCS websearch when advanced search MCPs are installed
+
+## Supported On-Prem LLM Servers
+
+Any LLM server with **Anthropic API compatibility** (`/v1/messages` endpoint) works. Popular options:
+
+> **Important:** Make sure to install a version that supports the Anthropic API format. Older versions only support OpenAI-compatible endpoints.
+
+| Server | Min Version | Pros | Cons |
+|--------|-------------|------|------|
+| [**Ollama**](https://ollama.com/) | v0.14.0+ | Easy setup, runs anywhere | Lower throughput, not for production |
+| [**LM Studio**](https://lmstudio.ai/) | v0.4.1+ | GUI, easy model management | Desktop only, not for production |
+| [**vLLM**](https://docs.vllm.ai/) | v0.17.0+ | High throughput, production-ready | More complex setup |
 
 ## Why Custom Web Search?
 
