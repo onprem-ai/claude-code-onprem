@@ -1,5 +1,7 @@
 # claude-code-onprem
 
+[![CI](https://github.com/onprem-ai/claude-code-onprem/actions/workflows/ci.yml/badge.svg)](https://github.com/onprem-ai/claude-code-onprem/actions/workflows/ci.yml)
+
 Super easy setup wizard for using Claude Code with on-premise LLMs. 
 
 CCS (Claude Code Switch) is being used so that your original configs remain intact and available while a separate config profile for on-premise LLMs will be added: You can later run `claude` as you know it or `ccs onprem` for running claude with on-premise LLMs. 
