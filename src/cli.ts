@@ -15,6 +15,49 @@ import {
 import { MIN_NODE_VERSION, MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
 import type { ModelInfo } from './types.js'
 
+export interface CliOptions {
+  llmUrl?: string
+  llmKey?: string
+  model?: string
+  exaKey?: string
+  braveKey?: string
+  yes?: boolean
+}
+
+export function parseArgs(argv: string[] = process.argv.slice(2)): CliOptions {
+  const options: CliOptions = {}
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+
+    if (arg === '-y' || arg === '--yes') {
+      options.yes = true
+    } else if (arg.startsWith('--llm-url=')) {
+      options.llmUrl = arg.slice('--llm-url='.length)
+    } else if (arg === '--llm-url' && argv[i + 1]) {
+      options.llmUrl = argv[++i]
+    } else if (arg.startsWith('--llm-key=')) {
+      options.llmKey = arg.slice('--llm-key='.length)
+    } else if (arg === '--llm-key' && argv[i + 1]) {
+      options.llmKey = argv[++i]
+    } else if (arg.startsWith('--model=')) {
+      options.model = arg.slice('--model='.length)
+    } else if (arg === '--model' && argv[i + 1]) {
+      options.model = argv[++i]
+    } else if (arg.startsWith('--exa-key=')) {
+      options.exaKey = arg.slice('--exa-key='.length)
+    } else if (arg === '--exa-key' && argv[i + 1]) {
+      options.exaKey = argv[++i]
+    } else if (arg.startsWith('--brave-key=')) {
+      options.braveKey = arg.slice('--brave-key='.length)
+    } else if (arg === '--brave-key' && argv[i + 1]) {
+      options.braveKey = argv[++i]
+    }
+  }
+
+  return options
+}
+
 function exitOnCancel<T>(value: T | symbol): T {
   if (p.isCancel(value)) {
     p.outro('Setup cancelled.')
@@ -23,7 +66,9 @@ function exitOnCancel<T>(value: T | symbol): T {
   return value
 }
 
-export async function run(): Promise<void> {
+export async function run(cliOptions?: CliOptions): Promise<void> {
+  const options = cliOptions ?? parseArgs()
+
   p.intro('Claude Code On-Prem Setup')
 
   // Step 1: Check prerequisites
@@ -59,13 +104,15 @@ export async function run(): Promise<void> {
 
   // Load existing profile for prefilling
   const existingProfile = await loadProfile(DEFAULTS.profileName)
-  let prefillEndpoint = ''
-  let prefillApiKey = ''
+  let prefillEndpoint = options.llmUrl || ''
+  let prefillApiKey = options.llmKey || ''
 
-  if (existingProfile) {
+  if (existingProfile && !options.llmUrl) {
     p.log.info('Existing profile found - current values will be prefilled')
     prefillEndpoint = existingProfile.env.ANTHROPIC_BASE_URL
-    prefillApiKey = existingProfile.env.ANTHROPIC_AUTH_TOKEN
+    if (!options.llmKey) {
+      prefillApiKey = existingProfile.env.ANTHROPIC_AUTH_TOKEN
+    }
   }
 
   // Step 2: LLM Endpoint Configuration
@@ -77,21 +124,31 @@ export async function run(): Promise<void> {
   let selectedModel = ''
 
   while (true) {
-    endpoint = exitOnCancel(await p.text({
-      message: 'What is your LLM endpoint URL?',
-      placeholder: 'http://localhost:8000/v1',
-      initialValue: prefillEndpoint,
-      validate: (value) => {
-        if (!value) return 'Endpoint URL is required'
-        try {
-          new URL(value)
-        } catch {
-          return 'Invalid URL format'
-        }
-      },
-    }))
+    // Use CLI option or prompt
+    if (options.yes && options.llmUrl) {
+      endpoint = options.llmUrl
+      p.log.info(`Using LLM URL: ${endpoint}`)
+    } else {
+      endpoint = exitOnCancel(await p.text({
+        message: 'What is your LLM endpoint URL?',
+        placeholder: 'http://localhost:8000/v1',
+        initialValue: prefillEndpoint,
+        validate: (value) => {
+          if (!value) return 'Endpoint URL is required'
+          try {
+            new URL(value)
+          } catch {
+            return 'Invalid URL format'
+          }
+        },
+      }))
+    }
 
-    if (prefillApiKey) {
+    // Use CLI option or prompt for API key
+    if (options.yes && options.llmKey !== undefined) {
+      apiKey = options.llmKey
+      p.log.info('Using provided LLM API key')
+    } else if (prefillApiKey && !options.yes) {
       const keepKey = exitOnCancel(await p.confirm({
         message: `API key configured (${prefillApiKey.slice(0, 4)}••••). Keep existing?`,
         initialValue: true,
@@ -99,6 +156,9 @@ export async function run(): Promise<void> {
       apiKey = keepKey ? prefillApiKey : exitOnCancel(await p.password({
         message: 'Enter new API key',
       })) || ''
+    } else if (options.yes) {
+      apiKey = prefillApiKey
+      if (apiKey) p.log.info('Using existing LLM API key')
     } else {
       apiKey = exitOnCancel(await p.password({
         message: 'API key (optional, leave empty if not required)',
@@ -117,6 +177,17 @@ export async function run(): Promise<void> {
     } else {
       modelSpinner.stop(`Failed: ${modelsResult.error}`)
 
+      if (options.yes) {
+        if (options.model) {
+          // User provided a model via CLI, proceed with it
+          selectedModel = options.model
+          p.log.info(`Using provided model: ${selectedModel}`)
+          break
+        }
+        p.log.error('Cannot fetch models in non-interactive mode. Provide --model or a valid endpoint.')
+        process.exit(1)
+      }
+
       const retry = exitOnCancel(await p.select({
         message: 'What would you like to do?',
         options: [
@@ -129,6 +200,7 @@ export async function run(): Promise<void> {
         selectedModel = exitOnCancel(await p.text({
           message: 'Enter model name',
           placeholder: 'qwen3-coder-next',
+          initialValue: options.model || '',
           validate: (value) => value ? undefined : 'Model name is required',
         }))
         break
@@ -141,10 +213,38 @@ export async function run(): Promise<void> {
 
   // Model selection
   if (models.length > 0) {
-    selectedModel = exitOnCancel(await p.select({
-      message: 'Select default model',
-      options: models.map((m) => ({ value: m.id, label: m.id })),
-    }))
+    if (options.model) {
+      // Use CLI-provided model, validate it exists
+      const modelExists = models.some(m => m.id === options.model)
+      if (modelExists) {
+        selectedModel = options.model
+        p.log.info(`Using model: ${selectedModel}`)
+      } else {
+        p.log.warning(`Model "${options.model}" not found in available models`)
+        if (options.yes) {
+          // In non-interactive mode, use it anyway (user might know better)
+          selectedModel = options.model
+          p.log.info(`Using model: ${selectedModel}`)
+        } else {
+          selectedModel = exitOnCancel(await p.select({
+            message: 'Select default model',
+            options: models.map((m) => ({ value: m.id, label: m.id })),
+          }))
+        }
+      }
+    } else if (options.yes) {
+      selectedModel = models[0].id
+      p.log.info(`Selected model: ${selectedModel}`)
+    } else {
+      selectedModel = exitOnCancel(await p.select({
+        message: 'Select default model',
+        options: models.map((m) => ({ value: m.id, label: m.id })),
+      }))
+    }
+  } else if (options.model) {
+    // No models fetched but user provided one via CLI
+    selectedModel = options.model
+    p.log.info(`Using model: ${selectedModel}`)
   }
 
   // Create profile
@@ -193,22 +293,37 @@ export async function run(): Promise<void> {
     initialSelection = ['exa']
   }
 
-  p.log.message('One provider is usually enough. Exa is optimized for coding agents.\nBrave is an alternative search for maximum privacy.')
+  let selectedProviders: string[]
 
-  const selectedProviders = exitOnCancel(await p.multiselect({
-    message: 'Which providers would you like to configure?',
-    options: [
-      { value: 'exa', label: 'Exa - best for coding (API docs, code examples, technical content)' },
-      { value: 'brave', label: 'Brave - privacy-focused (news, general research)' },
-    ],
-    initialValues: initialSelection,
-    required: false,
-  }))
+  if (options.yes) {
+    // In non-interactive mode, select providers based on which keys are provided
+    selectedProviders = []
+    if (options.exaKey) selectedProviders.push('exa')
+    if (options.braveKey) selectedProviders.push('brave')
+    if (selectedProviders.length > 0) {
+      p.log.info(`Selected providers: ${selectedProviders.join(', ')}`)
+    } else {
+      p.log.info('No web search providers selected (no API keys provided)')
+    }
+  } else {
+    p.log.message('One provider is usually enough. Exa is optimized for coding agents.\nBrave is an alternative search for maximum privacy.')
+
+    selectedProviders = exitOnCancel(await p.multiselect({
+      message: 'Which providers would you like to configure?',
+      options: [
+        { value: 'exa', label: 'Exa - best for coding (API docs, code examples, technical content)' },
+        { value: 'brave', label: 'Brave - privacy-focused (news, general research)' },
+      ],
+      initialValues: initialSelection,
+      required: false,
+    }))
+  }
 
   let anyMcpConfigured = false
 
   // Check for plugins to uninstall (not selected but installed)
-  if (!selectedProviders.includes('exa') && await pluginInstalled('websearch-exa')) {
+  // In non-interactive mode, skip uninstall prompts (keep existing plugins)
+  if (!options.yes && !selectedProviders.includes('exa') && await pluginInstalled('websearch-exa')) {
     const uninstallExa = exitOnCancel(await p.confirm({
       message: 'Exa plugin is installed but not selected. Would you like to uninstall it?',
       initialValue: false,
@@ -226,7 +341,7 @@ export async function run(): Promise<void> {
     }
   }
 
-  if (!selectedProviders.includes('brave') && await pluginInstalled('websearch-brave')) {
+  if (!options.yes && !selectedProviders.includes('brave') && await pluginInstalled('websearch-brave')) {
     const uninstallBrave = exitOnCancel(await p.confirm({
       message: 'Brave plugin is installed but not selected. Would you like to uninstall it?',
       initialValue: false,
@@ -269,7 +384,8 @@ export async function run(): Promise<void> {
     const alreadyInstalled = await pluginInstalled('websearch-exa')
 
     if (alreadyInstalled) {
-      const action = exitOnCancel(await p.select({
+      // In non-interactive mode, keep existing installation
+      const action = options.yes ? 'keep' : exitOnCancel(await p.select({
         message: 'Exa plugin is already installed. What would you like to do?',
         options: [
           { value: 'keep', label: 'Keep existing installation' },
@@ -334,14 +450,21 @@ export async function run(): Promise<void> {
         }
       }
     } else {
-      // Test API key first
+      // Test API key first (use CLI option or prompt)
       let exaConfigured = false
+      const providedExaKey = options.exaKey
 
       while (!exaConfigured) {
-        const exaKey = exitOnCancel(await p.password({
-          message: 'Exa API key (from dashboard.exa.ai)',
-          validate: (value) => value ? undefined : 'API key is required',
-        }))
+        let exaKey: string
+        if (providedExaKey && options.yes) {
+          exaKey = providedExaKey
+          p.log.info('Using provided Exa API key')
+        } else {
+          exaKey = exitOnCancel(await p.password({
+            message: 'Exa API key (from dashboard.exa.ai)',
+            validate: (value) => value ? undefined : 'API key is required',
+          }))
+        }
 
         const testSpinner = p.spinner()
         testSpinner.start('Testing Exa connection...')
@@ -373,16 +496,21 @@ export async function run(): Promise<void> {
         } else {
           testSpinner.stop(`Failed: ${testResult.error}`)
 
-          const action = exitOnCancel(await p.select({
-            message: 'What would you like to do?',
-            options: [
-              { value: 'retry', label: 'Enter a different API key' },
-              { value: 'skip', label: 'Skip Exa setup' },
-            ],
-          })) as 'retry' | 'skip'
-
-          if (action === 'skip') {
+          if (options.yes) {
+            p.log.error('Exa API key validation failed in non-interactive mode')
             exaConfigured = true
+          } else {
+            const action = exitOnCancel(await p.select({
+              message: 'What would you like to do?',
+              options: [
+                { value: 'retry', label: 'Enter a different API key' },
+                { value: 'skip', label: 'Skip Exa setup' },
+              ],
+            })) as 'retry' | 'skip'
+
+            if (action === 'skip') {
+              exaConfigured = true
+            }
           }
         }
       }
@@ -396,7 +524,8 @@ export async function run(): Promise<void> {
     const alreadyInstalled = await pluginInstalled('websearch-brave')
 
     if (alreadyInstalled) {
-      const action = exitOnCancel(await p.select({
+      // In non-interactive mode, keep existing installation
+      const action = options.yes ? 'keep' : exitOnCancel(await p.select({
         message: 'Brave plugin is already installed. What would you like to do?',
         options: [
           { value: 'keep', label: 'Keep existing installation' },
@@ -461,14 +590,21 @@ export async function run(): Promise<void> {
         }
       }
     } else {
-      // Test API key first
+      // Test API key first (use CLI option or prompt)
       let braveConfigured = false
+      const providedBraveKey = options.braveKey
 
       while (!braveConfigured) {
-        const braveKey = exitOnCancel(await p.password({
-          message: 'Brave API key (from api-dashboard.search.brave.com)',
-          validate: (value) => value ? undefined : 'API key is required',
-        }))
+        let braveKey: string
+        if (providedBraveKey && options.yes) {
+          braveKey = providedBraveKey
+          p.log.info('Using provided Brave API key')
+        } else {
+          braveKey = exitOnCancel(await p.password({
+            message: 'Brave API key (from api-dashboard.search.brave.com)',
+            validate: (value) => value ? undefined : 'API key is required',
+          }))
+        }
 
         const testSpinner = p.spinner()
         testSpinner.start('Testing Brave connection...')
@@ -500,16 +636,21 @@ export async function run(): Promise<void> {
         } else {
           testSpinner.stop(`Failed: ${testResult.error}`)
 
-          const action = exitOnCancel(await p.select({
-            message: 'What would you like to do?',
-            options: [
-              { value: 'retry', label: 'Enter a different API key' },
-              { value: 'skip', label: 'Skip Brave setup' },
-            ],
-          })) as 'retry' | 'skip'
-
-          if (action === 'skip') {
+          if (options.yes) {
+            p.log.error('Brave API key validation failed in non-interactive mode')
             braveConfigured = true
+          } else {
+            const action = exitOnCancel(await p.select({
+              message: 'What would you like to do?',
+              options: [
+                { value: 'retry', label: 'Enter a different API key' },
+                { value: 'skip', label: 'Skip Brave setup' },
+              ],
+            })) as 'retry' | 'skip'
+
+            if (action === 'skip') {
+              braveConfigured = true
+            }
           }
         }
       }
@@ -520,16 +661,25 @@ export async function run(): Promise<void> {
   const recommendDisable = anyMcpConfigured
   p.log.step(`CCS Built-in Web Search ${recommendDisable ? '(recommended: disable)' : ''}`)
 
-  if (anyMcpConfigured) {
-    p.log.message('You have installed custom web search plugins (Exa/Brave).\nDisable CCS built-in websearch to avoid duplicate results.')
+  let disableWebsearch: boolean
+  if (options.yes) {
+    // In non-interactive mode, disable if any MCP plugins were configured
+    disableWebsearch = anyMcpConfigured
+    if (disableWebsearch) {
+      p.log.info('Auto-disabling CCS built-in websearch (custom plugins configured)')
+    }
   } else {
-    p.log.message('No custom web search plugins were installed.\nKeeping CCS built-in websearch enabled.')
-  }
+    if (anyMcpConfigured) {
+      p.log.message('You have installed custom web search plugins (Exa/Brave).\nDisable CCS built-in websearch to avoid duplicate results.')
+    } else {
+      p.log.message('No custom web search plugins were installed.\nKeeping CCS built-in websearch enabled.')
+    }
 
-  const disableWebsearch = exitOnCancel(await p.confirm({
-    message: `Disable CCS built-in web search?${recommendDisable ? ' (recommended: yes)' : ''}`,
-    initialValue: anyMcpConfigured,
-  }))
+    disableWebsearch = exitOnCancel(await p.confirm({
+      message: `Disable CCS built-in web search?${recommendDisable ? ' (recommended: yes)' : ''}`,
+      initialValue: anyMcpConfigured,
+    }))
+  }
 
   if (disableWebsearch) {
     const websearchSpinner = p.spinner()
