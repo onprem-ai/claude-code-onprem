@@ -360,34 +360,31 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
   // Step 3: Web Search Providers
   p.log.step('Web Search Providers')
-  p.log.message('Claude Code can use web search to look up documentation,\nfind code examples, and research solutions.')
+  p.log.message('Configure web search to help your on-prem LLM with up-to-date information.')
 
-  // Check what's already installed to prefill selection
+  // Check what's already installed
   const exaInstalled = await pluginInstalled('websearch-exa')
   const braveInstalled = await pluginInstalled('websearch-brave')
 
   let initialSelection: string[]
   if (exaInstalled || braveInstalled) {
-    // Prefill with what's installed
     initialSelection = []
     if (exaInstalled) initialSelection.push('exa')
     if (braveInstalled) initialSelection.push('brave')
   } else {
-    // Nothing installed, default to Exa
     initialSelection = ['exa']
   }
 
   let selectedProviders: string[]
 
   if (options.yes) {
-    // In non-interactive mode, select providers based on which keys are provided
     selectedProviders = []
     if (options.exaKey) selectedProviders.push('exa')
     if (options.braveKey) selectedProviders.push('brave')
     if (selectedProviders.length > 0) {
       p.log.info(`Selected providers: ${selectedProviders.join(', ')}`)
     } else {
-      p.log.info('No web search providers selected (no API keys provided)')
+      p.log.info('No web search providers selected')
     }
   } else {
     p.log.message('One provider is usually enough. Exa is optimized for coding agents.\nBrave is an alternative search for maximum privacy.')
@@ -405,8 +402,25 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
   let anyMcpConfigured = false
 
+  // Add marketplace if not already added
+  if (selectedProviders.length > 0) {
+    const marketplaceSpinner = p.spinner()
+    marketplaceSpinner.start('Setting up plugin marketplace...')
+
+    if (!await isMarketplaceAdded()) {
+      const result = await addMarketplace()
+      if (result.success) {
+        marketplaceSpinner.stop('Marketplace added: onprem-ai')
+      } else {
+        marketplaceSpinner.stop(`Failed to add marketplace: ${result.error}`)
+        p.log.warning('You may need to add the marketplace manually')
+      }
+    } else {
+      marketplaceSpinner.stop('Marketplace already configured')
+    }
+  }
+
   // Check for plugins to uninstall (not selected but installed)
-  // In non-interactive mode, skip uninstall prompts (keep existing plugins)
   if (!options.yes && !selectedProviders.includes('exa') && await pluginInstalled('websearch-exa')) {
     const uninstallExa = exitOnCancel(await p.confirm({
       message: 'Exa plugin is installed but not selected. Would you like to uninstall it?',
@@ -443,34 +457,19 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
     }
   }
 
-  // Add marketplace if needed and any providers selected
-  if (selectedProviders.length > 0) {
-    const marketplaceSpinner = p.spinner()
-    marketplaceSpinner.start('Checking plugin marketplace...')
+  // Install web search plugins from marketplace
+  for (const provider of selectedProviders) {
+    const pluginName = provider === 'exa' ? 'websearch-exa' : 'websearch-brave'
+    const providerName = provider === 'exa' ? 'Exa' : 'Brave'
 
-    if (!await isMarketplaceAdded()) {
-      const result = await addMarketplace()
-      if (result.success) {
-        marketplaceSpinner.stop('Marketplace added: claude-code-onprem')
-      } else {
-        marketplaceSpinner.stop(`Failed to add marketplace: ${result.error}`)
-        p.log.warning('You may need to add the marketplace manually: claude plugin marketplace add onprem-ai/claude-code-onprem')
-      }
-    } else {
-      marketplaceSpinner.stop('Marketplace already configured')
-    }
-  }
+    p.log.step(`${providerName} Plugin`)
 
-  // Exa setup
-  if (selectedProviders.includes('exa')) {
-    p.log.step('Exa Plugin')
-
-    const alreadyInstalled = await pluginInstalled('websearch-exa')
+    const alreadyInstalled = await pluginInstalled(pluginName)
 
     if (alreadyInstalled) {
       // In non-interactive mode, keep existing installation
       const action = options.yes ? 'keep' : exitOnCancel(await p.select({
-        message: 'Exa plugin is already installed. What would you like to do?',
+        message: `${providerName} plugin is already installed. What would you like to do?`,
         options: [
           { value: 'keep', label: 'Keep existing installation' },
           { value: 'reinstall', label: 'Reinstall plugin' },
@@ -478,42 +477,39 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
       })) as 'keep' | 'reinstall'
 
       if (action === 'keep') {
-        p.log.success('Keeping existing Exa plugin')
+        p.log.success(`Keeping existing ${providerName} plugin`)
         anyMcpConfigured = true
       } else {
-        // Get existing key before reinstall (reinstall overwrites .mcp.json)
+        // Get existing key before reinstall
         const { getInstalledPluginApiKey } = await import('./plugins.js')
-        const existingKey = await getInstalledPluginApiKey('websearch-exa', 'EXA_API_KEY')
+        const existingKey = await getInstalledPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY')
 
         const spinner = p.spinner()
-        spinner.start('Reinstalling Exa plugin...')
-        const result = await installPlugin('websearch-exa')
+        spinner.start(`Reinstalling ${providerName} plugin...`)
+        const result = await installPlugin(pluginName)
         if (result.success) {
           if (existingKey) {
-            // Restore existing key
-            await setPluginApiKey('websearch-exa', 'EXA_API_KEY', existingKey)
-            spinner.stop('Exa plugin reinstalled')
-            p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
+            await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', existingKey)
+            spinner.stop(`${providerName} plugin reinstalled`)
+            p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
             anyMcpConfigured = true
           } else {
-            // No existing key found, prompt for one
-            spinner.stop('Exa plugin reinstalled')
-
+            spinner.stop(`${providerName} plugin reinstalled`)
             let keyConfigured = false
             while (!keyConfigured) {
-              const exaKey = exitOnCancel(await p.password({
-                message: 'Exa API key (from dashboard.exa.ai)',
+              const apiKey = exitOnCancel(await p.password({
+                message: provider === 'exa' ? 'Exa API key (from dashboard.exa.ai)' : 'Brave API key (from api-dashboard.search.brave.com)',
                 validate: (value) => value ? undefined : 'API key is required',
               }))
 
               const testSpinner = p.spinner()
-              testSpinner.start('Testing Exa connection...')
-              const testResult = await testExaConnection(exaKey)
+              testSpinner.start(`Testing ${providerName} connection...`)
+              const testResult = provider === 'exa' ? await testExaConnection(apiKey) : await testBraveConnection(apiKey)
 
               if (testResult.success) {
                 testSpinner.stop('Connected successfully')
-                await setPluginApiKey('websearch-exa', 'EXA_API_KEY', exaKey)
-                p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
+                await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
+                p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
                 anyMcpConfigured = true
                 keyConfigured = true
               } else {
@@ -522,7 +518,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
                   message: 'What would you like to do?',
                   options: [
                     { value: 'retry', label: 'Enter a different API key' },
-                    { value: 'skip', label: 'Skip Exa setup' },
+                    { value: 'skip', label: 'Skip setup' },
                   ],
                 })) as 'retry' | 'skip'
                 if (action === 'skip') keyConfigured = true
@@ -534,207 +530,63 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
         }
       }
     } else {
-      // Test API key first (use CLI option or prompt)
-      let exaConfigured = false
-      const providedExaKey = options.exaKey
+      // Not installed - test API key first
+      let configured = false
+      const providedKey = provider === 'exa' ? options.exaKey : options.braveKey
 
-      while (!exaConfigured) {
-        let exaKey: string
-        if (providedExaKey && options.yes) {
-          exaKey = providedExaKey
-          p.log.info('Using provided Exa API key')
+      while (!configured) {
+        let apiKey: string
+        if (providedKey && options.yes) {
+          apiKey = providedKey
+          p.log.info(`Using provided ${providerName} API key`)
         } else {
-          exaKey = exitOnCancel(await p.password({
-            message: 'Exa API key (from dashboard.exa.ai)',
+          apiKey = exitOnCancel(await p.password({
+            message: provider === 'exa' ? 'Exa API key (from dashboard.exa.ai)' : 'Brave API key (from api-dashboard.search.brave.com)',
             validate: (value) => value ? undefined : 'API key is required',
           }))
         }
 
         const testSpinner = p.spinner()
-        testSpinner.start('Testing Exa connection...')
+        testSpinner.start(`Testing ${providerName} connection...`)
 
-        const testResult = await testExaConnection(exaKey)
-
-        if (testResult.success) {
-          testSpinner.stop('Connected successfully')
-
-          const installSpinner = p.spinner()
-          installSpinner.start('Installing Exa plugin...')
-          const result = await installPlugin('websearch-exa')
-          if (result.success) {
-            // Set API key in plugin's .mcp.json
-            const keyResult = await setPluginApiKey('websearch-exa', 'EXA_API_KEY', exaKey)
-            if (keyResult.success) {
-              installSpinner.stop('Exa plugin installed')
-              p.log.success('Tools: get_code_context_exa, web_search_exa, web_fetch_exa')
-              anyMcpConfigured = true
-              exaConfigured = true
-            } else {
-              installSpinner.stop(`Installed but failed to set API key: ${keyResult.error}`)
-              exaConfigured = true
-            }
-          } else {
-            installSpinner.stop(`Failed: ${result.error}`)
-            exaConfigured = true // Exit loop on install failure
-          }
-        } else {
-          testSpinner.stop(`Failed: ${testResult.error}`)
-
-          if (options.yes) {
-            p.log.error('Exa API key validation failed in non-interactive mode')
-            exaConfigured = true
-          } else {
-            const action = exitOnCancel(await p.select({
-              message: 'What would you like to do?',
-              options: [
-                { value: 'retry', label: 'Enter a different API key' },
-                { value: 'skip', label: 'Skip Exa setup' },
-              ],
-            })) as 'retry' | 'skip'
-
-            if (action === 'skip') {
-              exaConfigured = true
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Brave setup
-  if (selectedProviders.includes('brave')) {
-    p.log.step('Brave Plugin')
-
-    const alreadyInstalled = await pluginInstalled('websearch-brave')
-
-    if (alreadyInstalled) {
-      // In non-interactive mode, keep existing installation
-      const action = options.yes ? 'keep' : exitOnCancel(await p.select({
-        message: 'Brave plugin is already installed. What would you like to do?',
-        options: [
-          { value: 'keep', label: 'Keep existing installation' },
-          { value: 'reinstall', label: 'Reinstall plugin' },
-        ],
-      })) as 'keep' | 'reinstall'
-
-      if (action === 'keep') {
-        p.log.success('Keeping existing Brave plugin')
-        anyMcpConfigured = true
-      } else {
-        // Get existing key before reinstall (reinstall overwrites .mcp.json)
-        const { getInstalledPluginApiKey } = await import('./plugins.js')
-        const existingKey = await getInstalledPluginApiKey('websearch-brave', 'BRAVE_API_KEY')
-
-        const spinner = p.spinner()
-        spinner.start('Reinstalling Brave plugin...')
-        const result = await installPlugin('websearch-brave')
-        if (result.success) {
-          if (existingKey) {
-            // Restore existing key
-            await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', existingKey)
-            spinner.stop('Brave plugin reinstalled')
-            p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
-            anyMcpConfigured = true
-          } else {
-            // No existing key found, prompt for one
-            spinner.stop('Brave plugin reinstalled')
-
-            let keyConfigured = false
-            while (!keyConfigured) {
-              const braveKey = exitOnCancel(await p.password({
-                message: 'Brave API key (from api-dashboard.search.brave.com)',
-                validate: (value) => value ? undefined : 'API key is required',
-              }))
-
-              const testSpinner = p.spinner()
-              testSpinner.start('Testing Brave connection...')
-              const testResult = await testBraveConnection(braveKey)
-
-              if (testResult.success) {
-                testSpinner.stop('Connected successfully')
-                await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', braveKey)
-                p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
-                anyMcpConfigured = true
-                keyConfigured = true
-              } else {
-                testSpinner.stop(`Failed: ${testResult.error}`)
-                const action = exitOnCancel(await p.select({
-                  message: 'What would you like to do?',
-                  options: [
-                    { value: 'retry', label: 'Enter a different API key' },
-                    { value: 'skip', label: 'Skip Brave setup' },
-                  ],
-                })) as 'retry' | 'skip'
-                if (action === 'skip') keyConfigured = true
-              }
-            }
-          }
-        } else {
-          spinner.stop(`Failed: ${result.error}`)
-        }
-      }
-    } else {
-      // Test API key first (use CLI option or prompt)
-      let braveConfigured = false
-      const providedBraveKey = options.braveKey
-
-      while (!braveConfigured) {
-        let braveKey: string
-        if (providedBraveKey && options.yes) {
-          braveKey = providedBraveKey
-          p.log.info('Using provided Brave API key')
-        } else {
-          braveKey = exitOnCancel(await p.password({
-            message: 'Brave API key (from api-dashboard.search.brave.com)',
-            validate: (value) => value ? undefined : 'API key is required',
-          }))
-        }
-
-        const testSpinner = p.spinner()
-        testSpinner.start('Testing Brave connection...')
-
-        const testResult = await testBraveConnection(braveKey)
+        const testResult = provider === 'exa' ? await testExaConnection(apiKey) : await testBraveConnection(apiKey)
 
         if (testResult.success) {
           testSpinner.stop('Connected successfully')
 
           const installSpinner = p.spinner()
-          installSpinner.start('Installing Brave plugin...')
-          const result = await installPlugin('websearch-brave')
+          installSpinner.start(`Installing ${providerName} plugin...`)
+          const result = await installPlugin(pluginName)
           if (result.success) {
-            // Set API key in plugin's .mcp.json
-            const keyResult = await setPluginApiKey('websearch-brave', 'BRAVE_API_KEY', braveKey)
+            const keyResult = await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
             if (keyResult.success) {
-              installSpinner.stop('Brave plugin installed')
-              p.log.success('Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+              installSpinner.stop(`${providerName} plugin installed`)
+              p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
               anyMcpConfigured = true
-              braveConfigured = true
+              configured = true
             } else {
               installSpinner.stop(`Installed but failed to set API key: ${keyResult.error}`)
-              braveConfigured = true
+              configured = true
             }
           } else {
             installSpinner.stop(`Failed: ${result.error}`)
-            braveConfigured = true // Exit loop on install failure
+            configured = true
           }
         } else {
           testSpinner.stop(`Failed: ${testResult.error}`)
 
           if (options.yes) {
-            p.log.error('Brave API key validation failed in non-interactive mode')
-            braveConfigured = true
+            p.log.error(`${providerName} API key validation failed in non-interactive mode`)
+            configured = true
           } else {
             const action = exitOnCancel(await p.select({
               message: 'What would you like to do?',
               options: [
                 { value: 'retry', label: 'Enter a different API key' },
-                { value: 'skip', label: 'Skip Brave setup' },
+                { value: 'skip', label: 'Skip setup' },
               ],
             })) as 'retry' | 'skip'
-
-            if (action === 'skip') {
-              braveConfigured = true
-            }
+            if (action === 'skip') configured = true
           }
         }
       }

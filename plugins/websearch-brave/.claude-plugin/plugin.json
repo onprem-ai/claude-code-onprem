@@ -1,6 +1,0 @@
-{
-  "name": "websearch-brave",
-  "description": "Brave web search MCP with privacy-focused search, news, and LLM-optimized content extraction",
-  "version": "1.0.0",
-  "keywords": ["websearch", "brave", "privacy", "news", "mcp"]
-}

@@ -5,8 +5,8 @@ import { access } from 'fs/promises'
 import { getProfileEnvVar, setProfileEnvVar, removeProfileEnvVar } from './profile.js'
 import { DEFAULTS } from './constants.js'
 
-const MARKETPLACE_NAME = 'claude-code-onprem'
-const MARKETPLACE_REPO = 'onprem-ai/claude-code-onprem'
+const MARKETPLACE_NAME = 'onprem-ai'
+const MARKETPLACE_REPO = 'onprem-ai/claude-marketplace'
 
 function getHome(): string {
   return process.env.HOME || homedir()

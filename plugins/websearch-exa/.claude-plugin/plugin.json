@@ -1,6 +1,0 @@
-{
-  "name": "websearch-exa",
-  "description": "Exa web search MCP with code-optimized search, API docs lookup, and URL content extraction",
-  "version": "1.0.0",
-  "keywords": ["websearch", "exa", "code-search", "api-docs", "mcp"]
-}
