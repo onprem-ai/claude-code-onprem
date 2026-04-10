@@ -1,6 +1,10 @@
 import * as p from '@clack/prompts'
 import pc from 'picocolors'
 import { execSync } from 'child_process'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json')
 import { checkPrerequisites } from './prerequisites.js'
 import { fetchModels, testExaConnection, testBraveConnection } from './models.js'
 import { loadProfile, createProfile } from './profile.js'
@@ -80,7 +84,7 @@ function runCommand(command: string): { success: boolean; error?: string } {
 export async function run(cliOptions?: CliOptions): Promise<void> {
   const options = cliOptions ?? parseArgs()
 
-  p.intro('Claude Code On-Prem Setup')
+  p.intro(`Claude Code On-Prem Setup v${pkg.version}`)
 
   // Step 1: Check prerequisites
   const prereqSpinner = p.spinner()
