@@ -32,14 +32,25 @@ interface ProfileOptions {
 }
 
 export async function createProfile(name: string, options: ProfileOptions): Promise<void> {
+  // Load existing profile to preserve any existing env vars (e.g., web search API keys)
+  const existingProfile = await loadProfile(name)
+  const existingEnv = (existingProfile?.env || {}) as Record<string, string>
+
+  // Remove core profile keys from existing env to avoid conflicts
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { CLAUDE_CODE_USE_FOUNDRY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL, ...restEnv } = existingEnv
+
   const profile: CcsProfile = {
     env: {
+      // Set core values
       CLAUDE_CODE_USE_FOUNDRY: '0',
       CLAUDE_CODE_USE_BEDROCK: '0',
       CLAUDE_CODE_USE_VERTEX: '0',
       ANTHROPIC_BASE_URL: options.endpoint,
       ANTHROPIC_AUTH_TOKEN: options.apiKey,
       ANTHROPIC_MODEL: options.model,
+      // Preserve any other env vars (e.g., EXA_API_KEY, BRAVE_API_KEY)
+      ...restEnv,
     }
   }
 
