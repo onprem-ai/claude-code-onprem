@@ -493,10 +493,49 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
         const result = await installPlugin(pluginName)
         if (result.success) {
           if (existingKey) {
-            await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', existingKey)
-            spinner.stop(`${providerName} plugin reinstalled`)
-            p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
-            anyMcpConfigured = true
+            // Ask user if they want to keep the existing API key
+            const keepKey = options.yes || exitOnCancel(await p.confirm({
+              message: `API key configured (${existingKey.slice(0, 4)}••••). Keep existing?`,
+              initialValue: true,
+            }))
+            if (keepKey) {
+              await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', existingKey)
+              spinner.stop(`${providerName} plugin reinstalled`)
+              p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+              anyMcpConfigured = true
+            } else {
+              // User wants to enter a new key
+              spinner.stop(`${providerName} plugin reinstalled`)
+              let keyConfigured = false
+              while (!keyConfigured) {
+                const apiKey = exitOnCancel(await p.password({
+                  message: provider === 'exa' ? 'Exa API key (from dashboard.exa.ai)' : 'Brave API key (from api-dashboard.search.brave.com)',
+                  validate: (value) => value ? undefined : 'API key is required',
+                }))
+
+                const testSpinner = p.spinner()
+                testSpinner.start(`Testing ${providerName} connection...`)
+                const testResult = provider === 'exa' ? await testExaConnection(apiKey) : await testBraveConnection(apiKey)
+
+                if (testResult.success) {
+                  testSpinner.stop('Connected successfully')
+                  await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
+                  p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
+                  anyMcpConfigured = true
+                  keyConfigured = true
+                } else {
+                  testSpinner.stop(`Failed: ${testResult.error}`)
+                  const action = exitOnCancel(await p.select({
+                    message: 'What would you like to do?',
+                    options: [
+                      { value: 'retry', label: 'Enter a different API key' },
+                      { value: 'skip', label: 'Skip setup' },
+                    ],
+                  })) as 'retry' | 'skip'
+                  if (action === 'skip') keyConfigured = true
+                }
+              }
+            }
           } else {
             spinner.stop(`${providerName} plugin reinstalled`)
             let keyConfigured = false
