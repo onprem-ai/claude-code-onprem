@@ -63,7 +63,9 @@ export async function installPlugin(pluginName: string): Promise<{ success: bool
 }
 
 export async function uninstallPlugin(pluginName: string): Promise<{ success: boolean; error?: string }> {
-  const result = execClaude(`plugin uninstall ${pluginName}@${MARKETPLACE_NAME}`)
+  // Uninstall uses just the plugin name, not @marketplace suffix
+  // Per web search docs: claude plr (plugin uninstall) takes just the plugin name
+  const result = execClaude(`plugin uninstall ${pluginName}`)
   if (!result.success) {
     return { success: false, error: result.output }
   }
