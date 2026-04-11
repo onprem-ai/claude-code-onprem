@@ -428,7 +428,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
   if (!options.yes && !selectedProviders.includes('exa') && await pluginInstalled('websearch-exa')) {
     const uninstallExa = exitOnCancel(await p.confirm({
       message: 'Exa plugin is installed but not selected. Would you like to uninstall it?',
-      initialValue: false,
+      initialValue: true,
     }))
     if (uninstallExa) {
       const spinner = p.spinner()
@@ -446,7 +446,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
   if (!options.yes && !selectedProviders.includes('brave') && await pluginInstalled('websearch-brave')) {
     const uninstallBrave = exitOnCancel(await p.confirm({
       message: 'Brave plugin is installed but not selected. Would you like to uninstall it?',
-      initialValue: false,
+      initialValue: true,
     }))
     if (uninstallBrave) {
       const spinner = p.spinner()
@@ -677,6 +677,6 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
   // Done
   p.log.success('Setup complete!')
-  p.note(pc.green('ccs onprem'), 'Run this to start Claude Code with on-prem LLM')
+  p.note(pc.greenBright('ccs onprem'), 'Run this to start Claude Code with on-prem LLM')
   p.outro('Happy coding!')
 }
