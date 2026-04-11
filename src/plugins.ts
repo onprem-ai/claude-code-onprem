@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 import { homedir } from 'os'
 import { join } from 'path'
-import { access } from 'fs/promises'
+import { access, readFile } from 'fs/promises'
 import { getProfileEnvVar, setProfileEnvVar, removeProfileEnvVar } from './profile.js'
 import { getExistingExaKey, getExistingBraveKey, addExaMcp, addBraveMcp, getClaudeConfig } from './mcp.js'
 import { readJsonFile, writeJsonFile } from './config.js'
@@ -12,6 +12,9 @@ function getClaudeConfigPath(): string {
   return join(home, '.claude.json')
 }
 
+// Path to the installed plugins JSON file - the single source of truth for plugin installation
+const INSTALLED_PLUGINS_PATH = join(process.env.HOME || homedir(), '.claude', 'plugins', 'installed_plugins.json')
+
 const MARKETPLACE_NAME = 'onprem-ai'
 const MARKETPLACE_REPO = 'onprem-ai/claude-marketplace'
 
@@ -19,6 +22,9 @@ function getHome(): string {
   return process.env.HOME || homedir()
 }
 
+// NOTE: Do NOT use directory-based detection for plugin installation status
+// The installed_plugins.json file is the authoritative source of truth
+// This cache directory is only for storing downloaded plugin files
 function getPluginsCacheDir(): string {
   return join(getHome(), '.claude', 'plugins', 'cache', MARKETPLACE_NAME)
 }
@@ -45,15 +51,6 @@ export async function addMarketplace(): Promise<{ success: boolean; error?: stri
   return { success: true }
 }
 
-export async function pluginInstalled(pluginName: string): Promise<boolean> {
-  try {
-    await access(join(getPluginsCacheDir(), pluginName))
-    return true
-  } catch {
-    return false
-  }
-}
-
 export async function installPlugin(pluginName: string): Promise<{ success: boolean; error?: string }> {
   const result = execClaude(`plugin install ${pluginName}@${MARKETPLACE_NAME} --scope user`)
   if (!result.success) {
@@ -62,14 +59,58 @@ export async function installPlugin(pluginName: string): Promise<{ success: bool
   return { success: true }
 }
 
-export async function uninstallPlugin(pluginName: string): Promise<{ success: boolean; error?: string }> {
-  // Uninstall uses just the plugin name, not @marketplace suffix
-  // Per web search docs: claude plr (plugin uninstall) takes just the plugin name
-  const result = execClaude(`plugin uninstall ${pluginName}`)
-  if (!result.success) {
-    return { success: false, error: result.output }
+// Legacy marketplace names that were previously used
+// These need to be tried in order for uninstall compatibility
+const MARKETPLACE_NAMES = ['onprem-ai', 'claude-code-onprem']
+
+// Returns array of full plugin IDs (plugin@marketplace) that are installed
+// pluginName is the base name without marketplace suffix (e.g., 'websearch-exa')
+export async function getInstalledPlugins(pluginName: string): Promise<string[]> {
+  try {
+    const data = await readJsonFile<Record<string, any>>(INSTALLED_PLUGINS_PATH)
+    const result: string[] = []
+
+    // Check for plugin with each marketplace suffix
+    for (const marketplace of MARKETPLACE_NAMES) {
+      const pluginKey = `${pluginName}@${marketplace}`
+      if (data?.plugins?.[pluginKey] !== undefined) {
+        result.push(pluginKey)
+      }
+    }
+    return result
+  } catch {
+    return []
   }
-  return { success: true }
+}
+
+export async function pluginInstalled(pluginName: string): Promise<boolean> {
+  const installed = await getInstalledPlugins(pluginName)
+  return installed.length > 0
+}
+
+export async function uninstallPlugin(pluginName: string): Promise<{ success: boolean; error?: string }> {
+  // First get all installed plugin IDs to know which marketplace formats are installed
+  const installedPlugins = await getInstalledPlugins(pluginName)
+
+  if (installedPlugins.length === 0) {
+    // Plugin not installed, return error
+    return {
+      success: false,
+      error: `Plugin "${pluginName}" not found in installed plugins`
+    }
+  }
+
+  // Uninstall using the correct format(s) that were found
+  for (const pluginId of installedPlugins) {
+    // pluginId is in format "plugin@marketplace"
+    const result = execClaude(`plugin uninstall ${pluginId}`)
+    if (result.success) {
+      return { success: true }
+    }
+  }
+
+  // If none worked, return the last error
+  return { success: false, error: execClaude(`plugin uninstall ${installedPlugins[0]}`).output }
 }
 
 // API key management - stores in CCS profile so env vars are available when running `ccs onprem`
