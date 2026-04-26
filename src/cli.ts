@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const pkg = require('../package.json')
 import { checkPrerequisites } from './prerequisites.js'
 import { fetchModels, testExaConnection, testBraveConnection } from './models.js'
-import { loadProfile, createProfile } from './profile.js'
+import { loadProfile, createProfile, profileExists } from './profile.js'
 import { disableCcsWebsearch } from './mcp.js'
 import {
   isMarketplaceAdded,
@@ -198,10 +198,13 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
   }
 
   // Step 2: Profile Name
-  // Remember the last used profile name across wizard runs
+  // Remember the last used profile name across wizard runs, but only if the profile still exists
   let lastProfileName: string | null = null
   try {
-    lastProfileName = (await readFile(PATHS.lastProfileName, 'utf-8')).trim() || null
+    const cached = (await readFile(PATHS.lastProfileName, 'utf-8')).trim()
+    if (cached && await profileExists(cached)) {
+      lastProfileName = cached
+    }
   } catch { /* file doesn't exist yet */ }
   const defaultProfileName = options.profile || lastProfileName || DEFAULTS.profileName
 
