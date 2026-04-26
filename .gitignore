@@ -39,3 +39,6 @@ coverage/
 # IDE
 .idea/
 *.iml
+
+# Wizard state cache
+.cache/

@@ -1,5 +1,6 @@
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
 export const MIN_NODE_VERSION = '18.0.0'
 export const MIN_CCS_VERSION = '7.65.3'
@@ -10,10 +11,14 @@ function getHome(): string {
   return process.env.HOME || homedir()
 }
 
+// Package root directory (parent of dist/ where this file lives)
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+
 export const PATHS = {
   get ccsConfig() { return join(getHome(), '.ccs', 'config.yaml') },
   get ccsProfilesDir() { return join(getHome(), '.ccs') },
   get claudeConfig() { return join(getHome(), '.claude.json') },
+  get lastProfileName() { return join(packageRoot, '.cache', 'last-profile-name') },
 }
 
 export const DEFAULTS = {

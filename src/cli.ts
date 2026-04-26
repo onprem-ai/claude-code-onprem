@@ -18,7 +18,9 @@ import {
   setPluginApiKey,
   removePluginApiKey,
 } from './plugins.js'
-import { MIN_NODE_VERSION, MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS } from './constants.js'
+import { readFile, writeFile, mkdir } from 'fs/promises'
+import { dirname } from 'path'
+import { MIN_NODE_VERSION, MIN_CCS_VERSION, MIN_CLAUDE_VERSION, DEFAULTS, PATHS } from './constants.js'
 import type { ModelInfo } from './types.js'
 
 export interface CliOptions {
@@ -27,6 +29,7 @@ export interface CliOptions {
   model?: string
   exaKey?: string
   braveKey?: string
+  profile?: string
   yes?: boolean
 }
 
@@ -58,6 +61,10 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): CliOptions {
       options.braveKey = arg.slice('--brave-key='.length)
     } else if (arg === '--brave-key' && argv[i + 1]) {
       options.braveKey = argv[++i]
+    } else if (arg.startsWith('--profile=')) {
+      options.profile = arg.slice('--profile='.length)
+    } else if (arg === '--profile' && argv[i + 1]) {
+      options.profile = argv[++i]
     }
   }
 
@@ -190,8 +197,32 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
     p.log.success(`Prerequisites OK (Node ${prereqs.node.version}, CCS ${prereqs.ccs.version}, Claude ${prereqs.claude.version})`)
   }
 
+  // Step 2: Profile Name
+  // Remember the last used profile name across wizard runs
+  let lastProfileName: string | null = null
+  try {
+    lastProfileName = (await readFile(PATHS.lastProfileName, 'utf-8')).trim() || null
+  } catch { /* file doesn't exist yet */ }
+  const defaultProfileName = options.profile || lastProfileName || DEFAULTS.profileName
+
+  let profileName: string
+  if (options.yes) {
+    profileName = defaultProfileName
+    p.log.info(`Using profile: ${profileName}`)
+  } else {
+    profileName = exitOnCancel(await p.text({
+      message: 'Profile name for this configuration?',
+      placeholder: DEFAULTS.profileName,
+      initialValue: defaultProfileName,
+      validate: (value) => {
+        if (!value) return 'Profile name is required'
+        if (!/^[a-zA-Z0-9_-]+$/.test(value)) return 'Profile name can only contain letters, numbers, hyphens, and underscores'
+      },
+    }))
+  }
+
   // Load existing profile for prefilling
-  const existingProfile = await loadProfile(DEFAULTS.profileName)
+  const existingProfile = await loadProfile(profileName)
   let prefillEndpoint = options.llmUrl || ''
   let prefillApiKey = options.llmKey || ''
 
@@ -203,7 +234,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
     }
   }
 
-  // Step 2: LLM Endpoint Configuration
+  // Step 3: LLM Endpoint Configuration
   p.log.step('LLM Endpoint Configuration')
 
   let endpoint = ''
@@ -339,12 +370,16 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
   const profileSpinner = p.spinner()
   profileSpinner.start('Creating CCS profile...')
   try {
-    await createProfile(DEFAULTS.profileName, {
+    await createProfile(profileName, {
       endpoint,
       apiKey,
       model: selectedModel,
     })
-    profileSpinner.stop('Profile created at ~/.ccs/onprem.settings.json')
+    profileSpinner.stop(`Profile created at ~/.ccs/${profileName}.settings.json`)
+
+    // Remember the profile name for next wizard run
+    await mkdir(dirname(PATHS.lastProfileName), { recursive: true })
+    await writeFile(PATHS.lastProfileName, profileName, 'utf-8')
 
     // Register the profile with CCS
     const registerSpinner = p.spinner()
@@ -362,7 +397,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
     process.exit(1)
   }
 
-  // Step 3: Web Search Providers
+  // Step 4: Web Search Providers
   p.log.step('Web Search Providers')
   p.log.message('Configure web search to help your on-prem LLM with up-to-date information.')
 
@@ -435,7 +470,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
       spinner.start('Uninstalling Exa plugin...')
       const result = await uninstallPlugin('websearch-exa')
       if (result.success) {
-        await removePluginApiKey('EXA_API_KEY')
+        await removePluginApiKey('EXA_API_KEY', profileName)
         spinner.stop('Exa plugin uninstalled')
       } else {
         spinner.stop(`Failed to uninstall: ${result.error}`)
@@ -453,7 +488,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
       spinner.start('Uninstalling Brave plugin...')
       const result = await uninstallPlugin('websearch-brave')
       if (result.success) {
-        await removePluginApiKey('BRAVE_API_KEY')
+        await removePluginApiKey('BRAVE_API_KEY', profileName)
         spinner.stop('Brave plugin uninstalled')
       } else {
         spinner.stop(`Failed to uninstall: ${result.error}`)
@@ -486,7 +521,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
       } else {
         // Get existing key before reinstall
         const { getInstalledPluginApiKey } = await import('./plugins.js')
-        const existingKey = await getInstalledPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY')
+        const existingKey = await getInstalledPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', profileName)
 
         const spinner = p.spinner()
         spinner.start(`Reinstalling ${providerName} plugin...`)
@@ -499,7 +534,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
               initialValue: true,
             }))
             if (keepKey) {
-              await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', existingKey)
+              await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', existingKey, profileName)
               spinner.stop(`${providerName} plugin reinstalled`)
               p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
               anyMcpConfigured = true
@@ -519,7 +554,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
                 if (testResult.success) {
                   testSpinner.stop('Connected successfully')
-                  await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
+                  await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey, profileName)
                   p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
                   anyMcpConfigured = true
                   keyConfigured = true
@@ -551,7 +586,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
               if (testResult.success) {
                 testSpinner.stop('Connected successfully')
-                await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
+                await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey, profileName)
                 p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
                 anyMcpConfigured = true
                 keyConfigured = true
@@ -601,7 +636,7 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
           installSpinner.start(`Installing ${providerName} plugin...`)
           const result = await installPlugin(pluginName)
           if (result.success) {
-            const keyResult = await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey)
+            const keyResult = await setPluginApiKey(pluginName, provider === 'exa' ? 'EXA_API_KEY' : 'BRAVE_API_KEY', apiKey, profileName)
             if (keyResult.success) {
               installSpinner.stop(`${providerName} plugin installed`)
               p.log.success(provider === 'exa' ? 'Tools: get_code_context_exa, web_search_exa, web_fetch_exa' : 'Tools: brave_web_search, brave_llm_context_search, brave_news_search')
@@ -677,6 +712,6 @@ export async function run(cliOptions?: CliOptions): Promise<void> {
 
   // Done
   p.log.success('Setup complete!')
-  p.note(pc.greenBright('ccs onprem'), 'Run this to start Claude Code with on-prem LLM')
+  p.note(pc.greenBright(`ccs ${profileName}`), 'Run this to start Claude Code with on-prem LLM')
   p.outro('Happy coding!')
 }

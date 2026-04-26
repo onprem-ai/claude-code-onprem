@@ -113,11 +113,11 @@ export async function uninstallPlugin(pluginName: string): Promise<{ success: bo
   return { success: false, error: execClaude(`plugin uninstall ${installedPlugins[0]}`).output }
 }
 
-// API key management - stores in CCS profile so env vars are available when running `ccs onprem`
-export async function getInstalledPluginApiKey(pluginName: string, keyName: string): Promise<string | null> {
+// API key management - stores in CCS profile so env vars are available when running the profile
+export async function getInstalledPluginApiKey(pluginName: string, keyName: string, profileName: string = DEFAULTS.profileName): Promise<string | null> {
   // First, check CCS profile (the current location for websearch plugins)
   try {
-    const value = await getProfileEnvVar(DEFAULTS.profileName, keyName)
+    const value = await getProfileEnvVar(profileName, keyName)
     if (value) return value
   } catch {
     // Continue to check other locations
@@ -137,7 +137,8 @@ export async function getInstalledPluginApiKey(pluginName: string, keyName: stri
 export async function setPluginApiKey(
   pluginName: string,
   envVarName: string,
-  value: string
+  value: string,
+  profileName: string = DEFAULTS.profileName
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // First, clean up old locations to avoid duplicate/conflicting keys
@@ -168,8 +169,8 @@ export async function setPluginApiKey(
       }
     }
 
-    // Write to CCS profile env section - available when running `ccs onprem`
-    await setProfileEnvVar(DEFAULTS.profileName, envVarName, value)
+    // Write to CCS profile env section - available when running the profile
+    await setProfileEnvVar(profileName, envVarName, value)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -177,11 +178,12 @@ export async function setPluginApiKey(
 }
 
 export async function removePluginApiKey(
-  envVarName: string
+  envVarName: string,
+  profileName: string = DEFAULTS.profileName
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Remove from CCS profile
-    await removeProfileEnvVar(DEFAULTS.profileName, envVarName)
+    await removeProfileEnvVar(profileName, envVarName)
 
     // Also clean up old location in .claude.json if it exists
     if (envVarName === 'EXA_API_KEY') {
